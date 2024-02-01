@@ -1,10 +1,11 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template
 import cv2
 import base64
 import os
 from openai import OpenAI
 from collections import deque
 import json
+import numpy as np
 
 app = Flask(__name__)
 
@@ -58,6 +59,10 @@ def process_frame():
     previous_texts.append(generated_text)
 
     return jsonify({"generatedText": generated_text, "previousTexts": list(previous_texts)})
+
+@app.route('/')
+def home():
+    return render_template('index.html')
 
 if __name__ == "__main__":
     app.run(debug=True)
