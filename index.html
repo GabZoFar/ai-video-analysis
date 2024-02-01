@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Webcam Frame Processor</title>
+</head>
+<body>
+    <video id="webcam" autoplay playsinline width="640" height="480"></video>
+    <button id="capture">Capture Frame</button>
+    <div id="output"></div>
+
+    <script>
+        const video = document.getElementById('webcam');
+        const output = document.getElementById('output');
+
+        // Request access to the webcam
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => video.srcObject = stream)
+            .catch(console.error);
+
+        document.getElementById('capture').addEventListener('click', () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            const frame = canvas.toDataURL('image/jpeg');
+
+            // Send the frame to the backend
+            fetch('/process_frame', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ frame: frame.split(',')[1], previousTexts: [] }), // Send only the base64 content, initialize previousTexts as empty for the first request
+            })
+            .then(response => response.json())
+            .then(data => {
+                output.textContent = `Generated Text: ${data.generatedText}`;
+            })
+            .catch(console.error);
+        });
+    </script>
+</body>
+</html>

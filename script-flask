@@ -1,0 +1,63 @@
+from flask import Flask, request, jsonify
+import cv2
+import base64
+import os
+from openai import OpenAI
+from collections import deque
+import json
+
+app = Flask(__name__)
+
+# Initialize OpenAI client
+client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
+
+def encode_image_to_base64(frame):
+    # Convert the base64 string back to bytes
+    img_data = base64.b64decode(frame)
+    # Convert bytes data to numpy array
+    nparr = np.frombuffer(img_data, np.uint8)
+    # Decode image
+    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    _, buffer = cv2.imencode(".jpg", img)
+    return base64.b64encode(buffer).decode('utf-8')
+
+def send_frame_to_gpt(frame, previous_texts, client):
+    context = ' '.join(previous_texts)
+    prompt_message = f"Context: {context}. Assess if the previous prediction matches the current situation. Current: explain the current situation in 10 words or less. Next: Predict the next situation in 10 words or less."
+
+    PROMPT_MESSAGES = {
+        "role": "user",
+        "content": [
+            prompt_message,
+            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{frame}"}}
+        ],
+    }
+
+    params = {
+        "model": "gpt-4-vision-preview",
+        "messages": [PROMPT_MESSAGES],
+        "max_tokens": 500,
+    }
+
+    result = client.chat.completions.create(**params)
+    return result.choices[0].message.content
+
+@app.route('/process_frame', methods=['POST'])
+def process_frame():
+    data = request.get_json()
+    frame = data['frame']
+    previous_texts = deque(data['previousTexts'], maxlen=5)  # Assuming previousTexts is sent as a list
+
+    # Encode the frame in Base64
+    base64_image = encode_image_to_base64(frame)
+
+    # Send the frame to GPT and get the generated text
+    generated_text = send_frame_to_gpt(base64_image, list(previous_texts), client)
+
+    # Add the text to the queue
+    previous_texts.append(generated_text)
+
+    return jsonify({"generatedText": generated_text, "previousTexts": list(previous_texts)})
+
+if __name__ == "__main__":
+    app.run(debug=True)
